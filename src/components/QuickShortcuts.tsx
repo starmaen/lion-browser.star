@@ -150,7 +150,7 @@ export const QuickShortcuts: React.FC<QuickShortcutsProps> = ({
                   e.stopPropagation();
                   setActiveMenuId(isMenuOpen ? null : shortcut.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 transition absolute top-0 left-0 p-1 text-slate-400 hover:text-white"
+                className="absolute -top-1 -left-1 p-1.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition z-10"
               >
                 <MoreVertical className="w-3 h-3" />
               </button>
@@ -180,7 +180,7 @@ export const QuickShortcuts: React.FC<QuickShortcutsProps> = ({
                     <span>تطبيق بدون ترويسة</span>
                     <Layers className="w-3.5 h-3.5 text-amber-400" />
                   </button>
-                  {shortcut.id.startsWith('custom-') && (
+                  {(
                     <button
                       type="button"
                       onClick={() => {

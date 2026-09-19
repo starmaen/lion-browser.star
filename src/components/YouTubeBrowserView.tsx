@@ -278,7 +278,9 @@ export const YouTubeBrowserView: React.FC<YouTubeBrowserViewProps> = ({
       }
     } else {
       // Execute live real search from YouTube
-      performLiveSearch(searchQuery);
+      const resultsUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery.trim())}`;
+                                            onNavigateTo(resultsUrl, `YouTube: ${searchQuery.trim()}`);
+                                            window.open(resultsUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
