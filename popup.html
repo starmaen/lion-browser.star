@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lion Browser</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="icon.png" alt="Lion Icon" class="icon">
+      <h1>Lion Browser</h1>
+    </div>
+    
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="ابحث في Google...">
+      <button id="searchBtn">بحث</button>
+    </div>
+    
+    <div class="engines">
+      <button class="engine-btn active" data-engine="google">Google</button>
+      <button class="engine-btn" data-engine="bing">Bing</button>
+      <button class="engine-btn" data-engine="duckduckgo">DuckDuckGo</button>
+      <button class="engine-btn" data-engine="yahoo">Yahoo</button>
+      <button class="engine-btn" data-engine="youtube">YouTube</button>
+    </div>
+    
+    <div class="quick-links">
+      <a href="https://google.com" class="quick-link">Google</a>
+      <a href="https://youtube.com" class="quick-link">YouTube</a>
+      <a href="https://github.com" class="quick-link">GitHub</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
