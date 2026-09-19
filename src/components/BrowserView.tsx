@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Browser } from '@capacitor/browser';
 import {
   ArrowLeft,
   ArrowRight,
@@ -203,6 +204,15 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
     setIsDockVisible(false);
   };
 
+  const openExternalUrl = async (url: string) => {
+    if (!url || url.startsWith('about:')) return;
+    try {
+      await Browser.open({ url, presentationStyle: 'fullscreen' });
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputUrl.trim()) return;
@@ -215,6 +225,7 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
       }
     }
     onNavigate(url);
+    void openExternalUrl(url);
   };
 
   const getDomain = (url: string) => {
