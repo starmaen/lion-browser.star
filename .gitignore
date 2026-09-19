@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local build files and temporary backups
+node_modules/
+dist/
+*.before-*
+*.pwa-backup
