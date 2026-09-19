@@ -1,0 +1,6 @@
+{
+  "name": "Lion Browser | متصفح الأسد",
+  "description": "متصفح إنترنت سريع وآمن للأندرويد بميزات حجب الإعلانات، حماية الخصوصية، بروتون VPN، مزامنة حساب غوغل، واختصارات التطبيقات بدون ترويسة.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
