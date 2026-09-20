@@ -47,8 +47,10 @@ export interface LionWebViewPlugin {
   clearData(o: { cache: boolean; cookies: boolean; history: boolean }): Promise<void>;
   openDownload(o: { id: string }): Promise<void>;
   cancelDownload(o: { id: string }): Promise<void>;
+  downloadUrl(o: { url: string }): Promise<void>;
   addListener(eventName: 'pageInfo', cb: (i: PageInfo) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'backAtRoot', cb: () => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'videoFound', cb: (e: { tabId: string; urls: string }) => void): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'downloadStarted' | 'downloadProgress' | 'downloadError',
     cb: (e: NativeDownloadEvent) => void

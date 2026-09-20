@@ -119,6 +119,33 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
 }) => {
   const [inputUrl, setInputUrl] = useState(tab.url);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('lion_toolbar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [foundVideos, setFoundVideos] = useState<string[]>([]);
+  const toggleToolbar = () => {
+    setIsMenuOpen(false);
+    setToolbarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('lion_toolbar_collapsed', next ? '1' : '0');
+      } catch {}
+      return next;
+    });
+  };
+  useEffect(() => {
+    if (!isNativeApp) return;
+    const h = LionWebView.addListener('videoFound', (e) => {
+      if (e.tabId === tab.id) setFoundVideos(e.urls ? e.urls.split('\n').filter(Boolean) : []);
+    });
+    return () => {
+      h.then((x) => x.remove()).catch(() => {});
+    };
+  }, [tab.id]);
   const [isDesktopMode, setIsDesktopMode] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [blockedCountOnPage, setBlockedCountOnPage] = useState(7);
@@ -337,7 +364,7 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
   return (
     <div id="browser-view-container" className="flex-1 flex flex-col h-full w-full bg-slate-950 select-none overflow-hidden">
       {/* Top Browser Bar (Android Style) */}
-      <div className="bg-slate-900 border-b border-slate-800 p-2 flex items-center gap-1.5 sm:gap-2 z-30 shadow-md">
+      <div style={isNativeApp && toolbarCollapsed ? { display: 'none' } : undefined} className="bg-slate-900 border-b border-slate-800 p-2 flex items-center gap-1.5 sm:gap-2 z-30 shadow-md">
         {/* Home & Nav Buttons */}
         {(isNativeApp || (canGoBack && onGoBack)) && (
           <button
@@ -725,6 +752,35 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
           )}
         </div>
       </div>
+
+      {isNativeApp && (
+        <div className="w-full shrink-0 flex items-center bg-slate-900/95 border-b border-slate-800 z-30">
+          <button
+            type="button"
+            id="browser-toolbar-toggle"
+            onClick={toggleToolbar}
+            className="flex-1 h-5 flex items-center justify-center text-slate-400 hover:text-amber-400 cursor-pointer"
+            title={toolbarCollapsed ? 'إظهار الشريط' : 'طيّ الشريط'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              {toolbarCollapsed ? <polyline points="6 9 12 15 18 9" /> : <polyline points="6 15 12 9 18 15" />}
+            </svg>
+          </button>
+          {foundVideos.length > 0 && (
+            <button
+              type="button"
+              id="browser-video-download-btn"
+              onClick={() => {
+                LionWebView.downloadUrl({ url: foundVideos[0] }).catch(() => {});
+                onShowToast?.('جارٍ تنزيل الفيديو…');
+              }}
+              className="mx-2 my-0.5 px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+            >
+              ⬇ تنزيل الفيديو
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Web Page Frame / Content or Smart Search / YouTube / App View */}
       <div className="relative flex-1 w-full bg-slate-950 overflow-hidden flex flex-col">

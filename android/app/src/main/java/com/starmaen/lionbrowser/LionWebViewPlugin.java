@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.MimeTypeMap;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -37,6 +38,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import org.json.JSONArray;
+import org.json.JSONTokener;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -76,6 +80,14 @@ public class LionWebViewPlugin extends Plugin {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Set<Long> activeDownloads = new HashSet<>();
     private boolean polling = false;
+
+    // اكتشاف الفيديوهات (mp4/webm..) في الصفحات العادية
+    private final Map<String, String> lastVideos = new HashMap<>();
+    private boolean scanning = false;
+    private static final String SCAN_JS =
+            "(function(){var r=[];function a(u){if(u&&/^https?:/i.test(u)&&/\\.(mp4|webm|mkv|mov|3gp|m4v)(\\?|#|$)/i.test(u)&&r.indexOf(u)<0)r.push(u);}"
+            + "document.querySelectorAll('video').forEach(function(v){a(v.currentSrc);a(v.src);"
+            + "v.querySelectorAll('source').forEach(function(s){a(s.src);});});return JSON.stringify(r);})()";
 
     // ------------------------------------------------------------------ setup
 
@@ -346,6 +358,11 @@ public class LionWebViewPlugin extends Plugin {
             @Override
             public void onPageStarted(WebView v, String url, Bitmap favicon) {
                 emit(tabId, v, url, true);
+                lastVideos.put(tabId, "");
+                JSObject vf = new JSObject();
+                vf.put("tabId", tabId);
+                vf.put("urls", "");
+                notifyListeners("videoFound", vf);
             }
 
             @Override
@@ -448,7 +465,7 @@ public class LionWebViewPlugin extends Plugin {
             if (pageUrl != null) r.addRequestHeader("Referer", pageUrl);
             r.setTitle(name);
             r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+            r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "LionBrowser/" + name);
             r.allowScanningByMediaScanner();
             long id = dm.enqueue(r);
 
@@ -523,6 +540,56 @@ public class LionWebViewPlugin extends Plugin {
         handler.postDelayed(pollTask, 500);
     }
 
+    // ----------------------------------------------------- video detection
+
+    private final Runnable scanTask = new Runnable() {
+        @Override
+        public void run() {
+            scanning = false;
+            final WebView w = active();
+            if (w == null || !shown) return;
+            final String tabId = activeTab;
+            String pageUrl = w.getUrl();
+            String host = pageUrl != null ? Uri.parse(pageUrl).getHost() : null;
+            boolean blocked = host != null
+                    && (host.contains("youtube.com") || host.contains("youtu.be") || host.contains("googlevideo.com"));
+            if (!blocked) {
+                w.evaluateJavascript(SCAN_JS, value -> handleScan(tabId, value));
+            }
+            scanning = true;
+            handler.postDelayed(this, 3000);
+        }
+    };
+
+    private void startScan() {
+        if (scanning) return;
+        scanning = true;
+        handler.postDelayed(scanTask, 1500);
+    }
+
+    private void handleScan(String tabId, String value) {
+        try {
+            if (value == null || value.equals("null")) return;
+            Object o = new JSONTokener(value).nextValue();
+            if (!(o instanceof String)) return;
+            JSONArray a = new JSONArray((String) o);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < a.length(); i++) {
+                if (i > 0) sb.append('\n');
+                sb.append(a.getString(i));
+            }
+            String joined = sb.toString();
+            String prev = lastVideos.get(tabId);
+            if (joined.equals(prev == null ? "" : prev)) return;
+            lastVideos.put(tabId, joined);
+            JSObject e = new JSObject();
+            e.put("tabId", tabId);
+            e.put("urls", joined);
+            notifyListeners("videoFound", e);
+        } catch (Exception ignored) {
+        }
+    }
+
     // ------------------------------------------------------ plugin methods
 
     @PluginMethod
@@ -550,6 +617,7 @@ public class LionWebViewPlugin extends Plugin {
                 e.getValue().setVisibility(e.getKey().equals(tabId) ? View.VISIBLE : View.GONE);
             }
             applyBounds(w);
+            startScan();
             if (url != null && (isNew || !norm(url).equals(norm(w.getUrl())))) {
                 w.loadUrl(url);
             }
@@ -592,6 +660,7 @@ public class LionWebViewPlugin extends Plugin {
                 shown = true;
                 w.setVisibility(View.VISIBLE);
                 applyBounds(w);
+                startScan();
             }
             refreshBack();
             call.resolve();
@@ -691,6 +760,25 @@ public class LionWebViewPlugin extends Plugin {
                 CookieManager.getInstance().flush();
                 WebStorage.getInstance().deleteAllData();
             }
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void downloadUrl(final PluginCall call) {
+        final String url = call.getString("url");
+        ui(() -> {
+            if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
+                call.reject("invalid url");
+                return;
+            }
+            WebView w = active();
+            String ua = w != null ? w.getSettings().getUserAgentString() : mobileUa;
+            String page = w != null ? w.getUrl() : null;
+            String ext = MimeTypeMap.getFileExtensionFromUrl(url);
+            String mime = (ext != null && !ext.isEmpty())
+                    ? MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase()) : null;
+            startDownload(page, url, ua, null, mime, -1);
             call.resolve();
         });
     }
