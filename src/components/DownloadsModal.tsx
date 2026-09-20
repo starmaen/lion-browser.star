@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { DownloadItem } from '../types';
 import { triggerBrowserDownload, downloadRealVideo } from '../utils/downloadHelper';
+import { isNativeApp, LionWebView } from '../native/lionWebView';
 
 interface DownloadsModalProps {
   downloads: DownloadItem[];
@@ -420,10 +421,27 @@ export const DownloadsModal: React.FC<DownloadsModalProps> = ({
                       <span>•</span>
                       <span>{item.downloadDate}</span>
                       <span>•</span>
-                      <span className="text-emerald-400 flex items-center gap-0.5">
-                        <CheckCircle2 className="w-3 h-3 inline" />
-                        تم الحفظ
-                      </span>
+                      {item.status === 'downloading' ? (
+                        <span className="text-amber-400 flex items-center gap-0.5 font-bold">
+                          <Clock className="w-3 h-3 inline" />
+                          جارٍ التنزيل {item.progress}%
+                        </span>
+                      ) : item.status === 'paused' ? (
+                        <span className="text-slate-300 flex items-center gap-0.5">
+                          <Pause className="w-3 h-3 inline" />
+                          متوقف
+                        </span>
+                      ) : item.status === 'failed' ? (
+                        <span className="text-rose-400 flex items-center gap-0.5">
+                          <AlertCircle className="w-3 h-3 inline" />
+                          فشل التنزيل
+                        </span>
+                      ) : (
+                        <span className="text-emerald-400 flex items-center gap-0.5">
+                          <CheckCircle2 className="w-3 h-3 inline" />
+                          تم الحفظ
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -447,6 +465,10 @@ export const DownloadsModal: React.FC<DownloadsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      if (isNativeApp && item.id.startsWith('native-')) {
+                        LionWebView.openDownload({ id: item.id.slice(7) }).catch(() => {});
+                        return;
+                      }
                       if (item.fileType === 'video') {
                         downloadRealVideo(item.sourceUrl, item.fileName);
                       } else {
@@ -460,6 +482,7 @@ export const DownloadsModal: React.FC<DownloadsModalProps> = ({
                   </button>
                   <a
                     href={item.sourceUrl}
+                    style={isNativeApp && item.id.startsWith('native-') ? { display: 'none' } : undefined}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl transition cursor-pointer"
@@ -469,7 +492,12 @@ export const DownloadsModal: React.FC<DownloadsModalProps> = ({
                   </a>
                   <button
                     type="button"
-                    onClick={() => onDeleteDownload(item.id)}
+                    onClick={() => {
+                      if (isNativeApp && item.id.startsWith('native-') && item.status === 'downloading') {
+                        LionWebView.cancelDownload({ id: item.id.slice(7) }).catch(() => {});
+                      }
+                      onDeleteDownload(item.id);
+                    }}
                     className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition cursor-pointer"
                     title="حذف"
                   >
@@ -485,7 +513,7 @@ export const DownloadsModal: React.FC<DownloadsModalProps> = ({
         <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>مسار الحفظ: Android / Download / LionBrowser</span>
+            <span>مسار الحفظ: Download / LionBrowser</span>
           </div>
           <button
             onClick={onClose}
