@@ -1142,33 +1142,6 @@ export default function App() {
                   </span>
                 </div>
               </div>
-
-              {/* Download Application Banner */}
-              <div
-                onClick={() => setIsApkModalOpen(true)}
-                className="w-full max-w-2xl mt-3 bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-teal-500/15 border border-emerald-500/30 hover:border-emerald-400/60 rounded-2xl p-3 cursor-pointer transition flex items-center justify-between gap-3 shadow-lg group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    <Smartphone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
-                      <span>{currentLanguage === 'ar' ? 'تنزيل وتثبيت التطبيق على هاتفك' : 'Install Lion Browser on Phone'}</span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">APK & PWA</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-400">
-                      {currentLanguage === 'ar'
-                        ? 'تثبيت فوري على شاشة الهاتف الرئيسية أو تنزيل ملف وحزمة APK'
-                        : 'Instant Home Screen Install or Download Android APK'}
-                    </p>
-                  </div>
-                </div>
-                <div className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shrink-0 flex items-center gap-1 shadow">
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{currentLanguage === 'ar' ? 'تنزيل' : 'Install'}</span>
-                </div>
-              </div>
             </div>
 
             {/* Bottom Android Browser Navigation Bar */}
