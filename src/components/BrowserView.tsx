@@ -39,6 +39,8 @@ import { SmartSearchView } from './SmartSearchView';
 import { GoogleSearchView } from './GoogleSearchView';
 import { YouTubeBrowserView } from './YouTubeBrowserView';
 import { AppShortcutView } from './AppShortcutView';
+import { NativeWebViewHost } from './NativeWebViewHost';
+import { isNativeApp, LionWebView } from '../native/lionWebView';
 
 interface BrowserViewProps {
   tab: BrowserTab;
@@ -73,6 +75,9 @@ interface BrowserViewProps {
   onReturnToPreviousTab?: () => void;
   previousTabTitle?: string;
   googleAccount?: GoogleAccount;
+  nativeNav?: { canGoBack: boolean; canGoForward: boolean; loading: boolean; progress: number };
+  nativeHidden?: boolean;
+  defaultSearchUrl?: string;
 }
 
 export const BrowserView: React.FC<BrowserViewProps> = ({
@@ -108,6 +113,9 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
   onReturnToPreviousTab,
   previousTabTitle,
   googleAccount,
+  nativeNav,
+  nativeHidden,
+  defaultSearchUrl,
 }) => {
   const [inputUrl, setInputUrl] = useState(tab.url);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -221,11 +229,11 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
       if (url.includes('.') && !url.includes(' ')) {
         url = 'https://' + url;
       } else {
-        url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+        url = `${defaultSearchUrl || 'https://www.google.com/search?q='}${encodeURIComponent(url)}`;
       }
     }
     onNavigate(url);
-    void openExternalUrl(url);
+    if (!isNativeApp) void openExternalUrl(url);
   };
 
   const getDomain = (url: string) => {
@@ -331,11 +339,18 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
       {/* Top Browser Bar (Android Style) */}
       <div className="bg-slate-900 border-b border-slate-800 p-2 flex items-center gap-1.5 sm:gap-2 z-30 shadow-md">
         {/* Home & Nav Buttons */}
-        {canGoBack && onGoBack && (
+        {(isNativeApp || (canGoBack && onGoBack)) && (
           <button
             id="browser-back-btn"
             type="button"
-            onClick={onGoBack}
+            onClick={
+              isNativeApp
+                ? () => {
+                    if (nativeNav?.canGoBack) LionWebView.goBack().catch(() => {});
+                    else onHome();
+                  }
+                : onGoBack
+            }
             className="p-2 text-slate-300 hover:text-amber-400 rounded-xl hover:bg-slate-800 transition cursor-pointer"
             title="رجوع للخلف"
           >
@@ -363,7 +378,10 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
 
         <button
           type="button"
-          onClick={() => setIframeKey((prev) => prev + 1)}
+          onClick={() => {
+            setIframeKey((prev) => prev + 1);
+            if (isNativeApp) LionWebView.reload().catch(() => {});
+          }}
           className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
           title="تحديث"
         >
@@ -710,7 +728,16 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
 
       {/* Web Page Frame / Content or Smart Search / YouTube / App View */}
       <div className="relative flex-1 w-full bg-slate-950 overflow-hidden flex flex-col">
-        {!forceRawIframe && isYouTubeUrl ? (
+        {isNativeApp ? (
+          <NativeWebViewHost
+            tabId={tab.id}
+            url={tab.url}
+            hidden={!!nativeHidden || isMenuOpen}
+            desktopMode={isDesktopMode}
+            loading={!!nativeNav?.loading}
+            progress={nativeNav?.progress ?? 0}
+          />
+        ) : !forceRawIframe && isYouTubeUrl ? (
           <YouTubeBrowserView
             currentUrl={tab.url}
             onNavigateTo={onNavigate}
@@ -833,7 +860,7 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
         )}
 
         {/* Quick Floating Action & Download Dock directly under the web page / video */}
-        <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-4 z-20 bg-slate-900/95 backdrop-blur-md border border-slate-800 px-3 py-2 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div style={isNativeApp ? { display: 'none' } : undefined} className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-4 z-20 bg-slate-900/95 backdrop-blur-md border border-slate-800 px-3 py-2 rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             <span className="text-slate-300 font-mono text-[11px] truncate max-w-[120px] sm:max-w-[160px]">

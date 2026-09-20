@@ -85,6 +85,8 @@ import { ImageDownloaderModal } from './components/ImageDownloaderModal';
 import { AndroidApkDownloadModal } from './components/AndroidApkDownloadModal';
 import { useBatteryStatus } from './hooks/useBatteryStatus';
 import { triggerBrowserDownload, downloadRealVideo } from './utils/downloadHelper';
+import { isNativeApp, closeNativeTab, LionWebView } from './native/lionWebView'; // LION_NATIVE_PATCH
+import { useNativeBridge } from './native/useNativeBridge';
 
 export default function App() {
   // State: System Languages & Localization (Arabic & English primary, with ability to add)
@@ -444,6 +446,9 @@ export default function App() {
 
   // Comprehensive Clear Data & Cache handler
   const handleClearBrowsingData = (options: ClearDataOptions) => {
+    if (isNativeApp) {
+      LionWebView.clearData({ cache: options.cache, cookies: options.cookies, history: options.history }).catch(() => {});
+    }
     if (options.history) {
       setHistory([]);
     }
@@ -640,6 +645,7 @@ export default function App() {
 
   const handleCloseTab = (id: string) => {
     const remaining = tabs.filter((t) => t.id !== id);
+    closeNativeTab(id);
     if (remaining.length === 0) {
       const fallbackId = 'tab-home-' + Date.now();
       const fallbackTab: BrowserTab = {
@@ -762,12 +768,31 @@ export default function App() {
     });
   };
 
+  const nativeNav = useNativeBridge({
+    activeTabId,
+    setTabs,
+    setHistory,
+    setDownloads,
+    onGoHome: handleGoHome,
+    onToast: (msg: string) => {
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 4000);
+    },
+  });
+  const isOverlayOpen =
+    isVpnModalOpen || isShieldModalOpen || isPasswordModalOpen || isGoogleModalOpen ||
+    isPerformanceModalOpen || isTabsModalOpen || isOpenTabsBoxOpen || isSettingsOpen ||
+    isDownloadsModalOpen || isBookmarksHistoryModalOpen || isClearDataModalOpen ||
+    isInternalVideoPlayerOpen || isImageDownloaderModalOpen || isApkModalOpen ||
+    standaloneApp !== null;
+
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const isBrowsingWeb = activeTab && activeTab.url !== 'about:home';
 
   return (
     <div
       id="lion-browser-root"
+      style={isNativeApp ? { height: '100dvh', minHeight: 0, overflow: 'hidden', paddingTop: 'max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px))', paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' } : undefined}
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start relative font-['Tajawal',sans-serif] selection:bg-amber-500 selection:text-slate-950"
       dir={currentLanguage === 'ar' || languages.find((l) => l.code === currentLanguage)?.dir === 'rtl' ? 'rtl' : 'ltr'}
     >
@@ -810,6 +835,7 @@ export default function App() {
           {/* Direct Install APK & PWA Button */}
           <button
             id="header-install-apk-btn"
+            style={isNativeApp ? { display: 'none' } : undefined}
             type="button"
             onClick={() => setIsApkModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white transition cursor-pointer shadow-md shadow-emerald-950/40 border border-emerald-400/40"
@@ -940,11 +966,11 @@ export default function App() {
         className={`flex-1 w-full transition-all duration-300 flex flex-col ${
           isMobileFrame
             ? 'max-w-md my-4 rounded-[42px] border-[10px] border-slate-900 shadow-2xl overflow-hidden bg-slate-950 min-h-[780px] ring-1 ring-slate-800'
-            : 'max-w-5xl mx-auto min-h-[calc(100vh-50px)]'
+            : `max-w-5xl mx-auto ${isNativeApp ? 'min-h-0 overflow-hidden' : 'min-h-[calc(100vh-50px)]'}`
         }`}
       >
         {/* Android Status Bar (Realistic mobile clock, battery, wifi, 5G) */}
-        <div className="w-full bg-slate-950/80 px-4 py-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 border-b border-slate-900 z-20">
+        <div style={isNativeApp ? { display: 'none' } : undefined} className="w-full bg-slate-950/80 px-4 py-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 border-b border-slate-900 z-20">
           <span className="font-bold text-slate-200 font-mono">{currentTime}</span>
 
           <div className="flex items-center gap-2">
@@ -1028,6 +1054,9 @@ export default function App() {
               }}
               onAddDownload={handleAddDownload}
               onOpenApkModal={() => setIsApkModalOpen(true)}
+              nativeNav={nativeNav}
+              nativeHidden={isOverlayOpen}
+              defaultSearchUrl={SEARCH_ENGINES[currentEngine].searchUrl}
               onShowToast={(msg) => {
                 setToastMessage(msg);
                 setTimeout(() => setToastMessage(null), 4000);
