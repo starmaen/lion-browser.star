@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
@@ -341,7 +342,7 @@ public class LionWebViewPlugin extends Plugin {
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
-        s.setSupportMultipleWindows(false);
+        s.setSupportMultipleWindows(true);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setUserAgentString(mobileUa);
 
@@ -420,6 +421,51 @@ public class LionWebViewPlugin extends Plugin {
             @Override
             public void onHideCustomView() {
                 hideCustom();
+            }
+
+            // target=_blank و window.open → تبويب جديد (والنوافذ المنبثقة بلا نقرة تُحجب)
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                if (!isUserGesture || resultMsg == null) return false;
+                final WebView tmp = new WebView(getActivity());
+                tmp.setWebViewClient(new WebViewClient() {
+                    private boolean done = false;
+
+                    private void fire(final WebView v, String url) {
+                        if (done || url == null || url.equals("about:blank")) return;
+                        done = true;
+                        if (url.startsWith("http://") || url.startsWith("https://")) {
+                            JSObject o = new JSObject();
+                            o.put("tabId", tabId);
+                            o.put("url", url);
+                            notifyListeners("newWindow", o);
+                        } else {
+                            handleUrl(url);
+                        }
+                        handler.post(() -> {
+                            try {
+                                v.stopLoading();
+                                v.destroy();
+                            } catch (Exception ignored) {
+                            }
+                        });
+                    }
+
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
+                        fire(v, r.getUrl().toString());
+                        return true;
+                    }
+
+                    @Override
+                    public void onPageStarted(WebView v, String url, Bitmap favicon) {
+                        fire(v, url);
+                    }
+                });
+                WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                transport.setWebView(tmp);
+                resultMsg.sendToTarget();
+                return true;
             }
 
             @Override

@@ -87,6 +87,7 @@ import { useBatteryStatus } from './hooks/useBatteryStatus';
 import { triggerBrowserDownload, downloadRealVideo } from './utils/downloadHelper';
 import { isNativeApp, closeNativeTab, LionWebView } from './native/lionWebView'; // LION_NATIVE_PATCH
 import { useNativeBridge } from './native/useNativeBridge';
+import { NativeTranslateBar } from './components/NativeTranslateBar';
 
 export default function App() {
   // State: System Languages & Localization (Arabic & English primary, with ability to add)
@@ -572,18 +573,23 @@ export default function App() {
 
   // Handle Home Click
   const handleGoHome = () => {
-    // Record current tab as previous before going home
+    const current = tabs.find((t) => t.id === activeTabId);
+    if (current && current.url === 'about:home') return; // already on the home screen
+    // Record current tab as previous before going home (the page tab stays open)
     if (activeTabId) {
       setPreviousTabId(activeTabId);
     }
-    // Check if there is already an existing about:home tab
+    // Reuse an existing home tab, otherwise open a NEW home tab instead of destroying the page tab
     const existingHomeTab = tabs.find((t) => t.url === 'about:home');
-    if (existingHomeTab && existingHomeTab.id !== activeTabId) {
+    if (existingHomeTab) {
       setActiveTabId(existingHomeTab.id);
     } else {
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, url: 'about:home', title: 'الصفحة الرئيسية' } : t))
-      );
+      const homeId = 'tab-home-' + Date.now();
+      setTabs((prev) => [
+        ...prev,
+        { id: homeId, title: 'الصفحة الرئيسية', url: 'about:home', isLoading: false },
+      ]);
+      setActiveTabId(homeId);
     }
   };
 
@@ -774,6 +780,7 @@ export default function App() {
     setHistory,
     setDownloads,
     onGoHome: handleGoHome,
+    onNewWindow: (url: string) => handleNewTab(undefined, url, url),
     onToast: (msg: string) => {
       setToastMessage(msg);
       setTimeout(() => setToastMessage(null), 4000);
@@ -781,7 +788,7 @@ export default function App() {
   });
   const isOverlayOpen =
     isVpnModalOpen || isShieldModalOpen || isPasswordModalOpen || isGoogleModalOpen ||
-    isPerformanceModalOpen || isTabsModalOpen || isOpenTabsBoxOpen || isSettingsOpen ||
+    isPerformanceModalOpen || isTabsModalOpen || isOpenTabsBoxOpen || isSettingsOpen || isTranslationBarOpen ||
     isDownloadsModalOpen || isBookmarksHistoryModalOpen || isClearDataModalOpen ||
     isInternalVideoPlayerOpen || isImageDownloaderModalOpen || isApkModalOpen ||
     standaloneApp !== null;
@@ -1065,13 +1072,23 @@ export default function App() {
             />
 
             {/* Translation Bar overlay on demand */}
-            {isTranslationBarOpen && (
-              <TranslationBar
-                currentUrl={activeTab.url}
-                pageTitle={activeTab.title || 'صفحة الويب'}
-                onClose={() => setIsTranslationBarOpen(false)}
-              />
-            )}
+            {isTranslationBarOpen &&
+              (isNativeApp ? (
+                <NativeTranslateBar
+                  currentUrl={activeTab.url}
+                  onClose={() => setIsTranslationBarOpen(false)}
+                  onTranslate={(u) => {
+                    setIsTranslationBarOpen(false);
+                    handleNavigateTo(u, activeTab.title);
+                  }}
+                />
+              ) : (
+                <TranslationBar
+                  currentUrl={activeTab.url}
+                  pageTitle={activeTab.title || 'صفحة الويب'}
+                  onClose={() => setIsTranslationBarOpen(false)}
+                />
+              ))}
           </div>
         ) : (
           /* HOME SCREEN OF LION BROWSER */

@@ -18,6 +18,7 @@ interface Options {
   setDownloads: Dispatch<SetStateAction<DownloadItem[]>>;
   onGoHome: () => void;
   onToast: (msg: string) => void;
+  onNewWindow?: (url: string) => void;
 }
 
 const fmtSize = (b?: number) => {
@@ -97,6 +98,12 @@ export function useNativeBridge(opts: Options): NativeNav {
     );
 
     handles.push(LionWebView.addListener('backAtRoot', () => optsRef.current.onGoHome()));
+
+    handles.push(
+      LionWebView.addListener('newWindow', (e) => {
+        if (e.url) optsRef.current.onNewWindow?.(e.url);
+      })
+    );
 
     handles.push(
       LionWebView.addListener('downloadStarted', (e) => {

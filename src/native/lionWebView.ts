@@ -51,6 +51,7 @@ export interface LionWebViewPlugin {
   addListener(eventName: 'pageInfo', cb: (i: PageInfo) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'backAtRoot', cb: () => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'videoFound', cb: (e: { tabId: string; urls: string }) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: 'newWindow', cb: (e: { tabId: string; url: string }) => void): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'downloadStarted' | 'downloadProgress' | 'downloadError',
     cb: (e: NativeDownloadEvent) => void
