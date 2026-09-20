@@ -127,6 +127,11 @@ export const BrowserView: React.FC<BrowserViewProps> = ({
     }
   });
   const [foundVideos, setFoundVideos] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isNativeApp) return;
+    document.documentElement.setAttribute('data-lion-bar-collapsed', toolbarCollapsed ? '1' : '0');
+    return () => document.documentElement.removeAttribute('data-lion-bar-collapsed');
+  }, [toolbarCollapsed]);
   const toggleToolbar = () => {
     setIsMenuOpen(false);
     setToolbarCollapsed((prev) => {

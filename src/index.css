@@ -1,1 +1,4 @@
 @import "tailwindcss";
+
+/* LION_UI_PATCH: عند طيّ الشريط يختفي شريط التطبيق العلوي أيضاً أثناء التصفح */
+html[data-lion-bar-collapsed="1"] #lion-app-header { display: none; }

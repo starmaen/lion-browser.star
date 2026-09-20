@@ -87,6 +87,7 @@ import { useBatteryStatus } from './hooks/useBatteryStatus';
 import { triggerBrowserDownload, downloadRealVideo } from './utils/downloadHelper';
 import { isNativeApp, closeNativeTab, LionWebView } from './native/lionWebView'; // LION_NATIVE_PATCH
 import { useNativeBridge } from './native/useNativeBridge';
+// LION_UI_PATCH
 import { NativeTranslateBar } from './components/NativeTranslateBar';
 
 export default function App() {
@@ -804,7 +805,7 @@ export default function App() {
       dir={currentLanguage === 'ar' || languages.find((l) => l.code === currentLanguage)?.dir === 'rtl' ? 'rtl' : 'ltr'}
     >
       {/* Top Universal Control & Frame Switcher Bar */}
-      <header className="w-full bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center justify-between z-30 backdrop-blur-md">
+      <header id="lion-app-header" className={`w-full bg-slate-900/90 border-b border-slate-800 px-3 ${isNativeApp ? 'py-1' : 'py-2'} flex items-center justify-between z-30 backdrop-blur-md`}>
         {/* Circular Lion Head Emblem Brand */}
         <div
           onClick={handleGoHome}
@@ -824,14 +825,14 @@ export default function App() {
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500">
+              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 whitespace-nowrap">
                 Lion Browser
               </span>
-              <span className="text-[9px] font-black bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-500/30">
+              <span style={isNativeApp ? { display: 'none' } : undefined} className="text-[9px] font-black bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-500/30">
                 PRO
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-medium block">
+            <span style={isNativeApp ? { display: 'none' } : undefined} className="text-[10px] text-slate-400 font-medium block">
               {currentLanguage === 'ar' ? 'متصفح الأسد للأندرويد' : 'Fast & Secure Android Browser'}
             </span>
           </div>
@@ -1100,16 +1101,18 @@ export default function App() {
                   size="md"
                   showSubtitle={true}
                   titleText={t(currentLanguage, 'appName')}
-                  subtitleText={t(currentLanguage, 'appSubtitle')}
+                  subtitleText={t(currentLanguage, 'appSubtitle').replace(/\s*[•·]\s*Proton VPN/g, '').replace(/Proton VPN\s*[•·]\s*/g, '')}
                 />
               </div>
 
               {/* Search Engine Pills + Main Search Bar */}
-              <SearchBar
-                currentEngine={currentEngine}
-                onEngineChange={(engine) => setCurrentEngine(engine)}
-                onSearch={handleSearchSubmit}
-              />
+              <div className="w-full" style={isNativeApp ? ({ zoom: 1.15 } as React.CSSProperties) : undefined}>
+                <SearchBar
+                  currentEngine={currentEngine}
+                  onEngineChange={(engine) => setCurrentEngine(engine)}
+                  onSearch={handleSearchSubmit}
+                />
+              </div>
 
               {/* 10 Requested Quick Shortcut Icons + Add Shortcut + Standalone Launcher */}
               <QuickShortcuts
@@ -1268,7 +1271,7 @@ export default function App() {
         )}
 
         {/* Android Bottom Gesture Indicator Bar */}
-        <div className="w-full bg-slate-950 py-2 flex items-center justify-center">
+        <div style={isNativeApp ? { display: 'none' } : undefined} className="w-full bg-slate-950 py-2 flex items-center justify-center">
           <div className="w-32 h-1 rounded-full bg-slate-700"></div>
         </div>
       </main>
