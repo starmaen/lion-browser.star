@@ -85,10 +85,6 @@ import { ImageDownloaderModal } from './components/ImageDownloaderModal';
 import { AndroidApkDownloadModal } from './components/AndroidApkDownloadModal';
 import { useBatteryStatus } from './hooks/useBatteryStatus';
 import { triggerBrowserDownload, downloadRealVideo } from './utils/downloadHelper';
-import { isNativeApp, closeNativeTab, LionWebView } from './native/lionWebView'; // LION_NATIVE_PATCH
-import { useNativeBridge } from './native/useNativeBridge';
-// LION_UI_PATCH
-import { NativeTranslateBar } from './components/NativeTranslateBar';
 
 export default function App() {
   // State: System Languages & Localization (Arabic & English primary, with ability to add)
@@ -448,9 +444,6 @@ export default function App() {
 
   // Comprehensive Clear Data & Cache handler
   const handleClearBrowsingData = (options: ClearDataOptions) => {
-    if (isNativeApp) {
-      LionWebView.clearData({ cache: options.cache, cookies: options.cookies, history: options.history }).catch(() => {});
-    }
     if (options.history) {
       setHistory([]);
     }
@@ -574,23 +567,18 @@ export default function App() {
 
   // Handle Home Click
   const handleGoHome = () => {
-    const current = tabs.find((t) => t.id === activeTabId);
-    if (current && current.url === 'about:home') return; // already on the home screen
-    // Record current tab as previous before going home (the page tab stays open)
+    // Record current tab as previous before going home
     if (activeTabId) {
       setPreviousTabId(activeTabId);
     }
-    // Reuse an existing home tab, otherwise open a NEW home tab instead of destroying the page tab
+    // Check if there is already an existing about:home tab
     const existingHomeTab = tabs.find((t) => t.url === 'about:home');
-    if (existingHomeTab) {
+    if (existingHomeTab && existingHomeTab.id !== activeTabId) {
       setActiveTabId(existingHomeTab.id);
     } else {
-      const homeId = 'tab-home-' + Date.now();
-      setTabs((prev) => [
-        ...prev,
-        { id: homeId, title: 'الصفحة الرئيسية', url: 'about:home', isLoading: false },
-      ]);
-      setActiveTabId(homeId);
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, url: 'about:home', title: 'الصفحة الرئيسية' } : t))
+      );
     }
   };
 
@@ -652,7 +640,6 @@ export default function App() {
 
   const handleCloseTab = (id: string) => {
     const remaining = tabs.filter((t) => t.id !== id);
-    closeNativeTab(id);
     if (remaining.length === 0) {
       const fallbackId = 'tab-home-' + Date.now();
       const fallbackTab: BrowserTab = {
@@ -775,37 +762,17 @@ export default function App() {
     });
   };
 
-  const nativeNav = useNativeBridge({
-    activeTabId,
-    setTabs,
-    setHistory,
-    setDownloads,
-    onGoHome: handleGoHome,
-    onNewWindow: (url: string) => handleNewTab(undefined, url, url),
-    onToast: (msg: string) => {
-      setToastMessage(msg);
-      setTimeout(() => setToastMessage(null), 4000);
-    },
-  });
-  const isOverlayOpen =
-    isVpnModalOpen || isShieldModalOpen || isPasswordModalOpen || isGoogleModalOpen ||
-    isPerformanceModalOpen || isTabsModalOpen || isOpenTabsBoxOpen || isSettingsOpen || isTranslationBarOpen ||
-    isDownloadsModalOpen || isBookmarksHistoryModalOpen || isClearDataModalOpen ||
-    isInternalVideoPlayerOpen || isImageDownloaderModalOpen || isApkModalOpen ||
-    standaloneApp !== null;
-
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const isBrowsingWeb = activeTab && activeTab.url !== 'about:home';
 
   return (
     <div
       id="lion-browser-root"
-      style={isNativeApp ? { height: '100dvh', minHeight: 0, overflow: 'hidden', paddingTop: 'max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px))', paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px))' } : undefined}
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-start relative font-['Tajawal',sans-serif] selection:bg-amber-500 selection:text-slate-950"
       dir={currentLanguage === 'ar' || languages.find((l) => l.code === currentLanguage)?.dir === 'rtl' ? 'rtl' : 'ltr'}
     >
       {/* Top Universal Control & Frame Switcher Bar */}
-      <header id="lion-app-header" className={`w-full bg-slate-900/90 border-b border-slate-800 px-3 ${isNativeApp ? 'py-1' : 'py-2'} flex items-center justify-between z-30 backdrop-blur-md`}>
+      <header className="w-full bg-slate-900/90 border-b border-slate-800 px-3 py-2 flex items-center justify-between z-30 backdrop-blur-md">
         {/* Circular Lion Head Emblem Brand */}
         <div
           onClick={handleGoHome}
@@ -825,14 +792,14 @@ export default function App() {
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500 whitespace-nowrap">
+              <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-500">
                 Lion Browser
               </span>
-              <span style={isNativeApp ? { display: 'none' } : undefined} className="text-[9px] font-black bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-500/30">
+              <span className="text-[9px] font-black bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-500/30">
                 PRO
               </span>
             </div>
-            <span style={isNativeApp ? { display: 'none' } : undefined} className="text-[10px] text-slate-400 font-medium block">
+            <span className="text-[10px] text-slate-400 font-medium block">
               {currentLanguage === 'ar' ? 'متصفح الأسد للأندرويد' : 'Fast & Secure Android Browser'}
             </span>
           </div>
@@ -843,7 +810,6 @@ export default function App() {
           {/* Direct Install APK & PWA Button */}
           <button
             id="header-install-apk-btn"
-            style={isNativeApp ? { display: 'none' } : undefined}
             type="button"
             onClick={() => setIsApkModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white transition cursor-pointer shadow-md shadow-emerald-950/40 border border-emerald-400/40"
@@ -974,11 +940,11 @@ export default function App() {
         className={`flex-1 w-full transition-all duration-300 flex flex-col ${
           isMobileFrame
             ? 'max-w-md my-4 rounded-[42px] border-[10px] border-slate-900 shadow-2xl overflow-hidden bg-slate-950 min-h-[780px] ring-1 ring-slate-800'
-            : `max-w-5xl mx-auto ${isNativeApp ? 'min-h-0 overflow-hidden' : 'min-h-[calc(100vh-50px)]'}`
+            : 'max-w-5xl mx-auto min-h-[calc(100vh-50px)]'
         }`}
       >
         {/* Android Status Bar (Realistic mobile clock, battery, wifi, 5G) */}
-        <div style={isNativeApp ? { display: 'none' } : undefined} className="w-full bg-slate-950/80 px-4 py-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 border-b border-slate-900 z-20">
+        <div className="w-full bg-slate-950/80 px-4 py-1.5 flex items-center justify-between text-[11px] font-medium text-slate-400 border-b border-slate-900 z-20">
           <span className="font-bold text-slate-200 font-mono">{currentTime}</span>
 
           <div className="flex items-center gap-2">
@@ -1062,9 +1028,6 @@ export default function App() {
               }}
               onAddDownload={handleAddDownload}
               onOpenApkModal={() => setIsApkModalOpen(true)}
-              nativeNav={nativeNav}
-              nativeHidden={isOverlayOpen}
-              defaultSearchUrl={SEARCH_ENGINES[currentEngine].searchUrl}
               onShowToast={(msg) => {
                 setToastMessage(msg);
                 setTimeout(() => setToastMessage(null), 4000);
@@ -1073,23 +1036,13 @@ export default function App() {
             />
 
             {/* Translation Bar overlay on demand */}
-            {isTranslationBarOpen &&
-              (isNativeApp ? (
-                <NativeTranslateBar
-                  currentUrl={activeTab.url}
-                  onClose={() => setIsTranslationBarOpen(false)}
-                  onTranslate={(u) => {
-                    setIsTranslationBarOpen(false);
-                    handleNavigateTo(u, activeTab.title);
-                  }}
-                />
-              ) : (
-                <TranslationBar
-                  currentUrl={activeTab.url}
-                  pageTitle={activeTab.title || 'صفحة الويب'}
-                  onClose={() => setIsTranslationBarOpen(false)}
-                />
-              ))}
+            {isTranslationBarOpen && (
+              <TranslationBar
+                currentUrl={activeTab.url}
+                pageTitle={activeTab.title || 'صفحة الويب'}
+                onClose={() => setIsTranslationBarOpen(false)}
+              />
+            )}
           </div>
         ) : (
           /* HOME SCREEN OF LION BROWSER */
@@ -1101,18 +1054,17 @@ export default function App() {
                   size="md"
                   showSubtitle={true}
                   titleText={t(currentLanguage, 'appName')}
-                  subtitleText={t(currentLanguage, 'appSubtitle').replace(/\s*[•·]\s*Proton VPN/g, '').replace(/Proton VPN\s*[•·]\s*/g, '')}
+                  subtitleText={t(currentLanguage, 'appSubtitle')}
                 />
               </div>
 
               {/* Search Engine Pills + Main Search Bar */}
-              <div className="w-full" style={isNativeApp ? ({ zoom: 1.15 } as React.CSSProperties) : undefined}>
-                <SearchBar
-                  currentEngine={currentEngine}
-                  onEngineChange={(engine) => setCurrentEngine(engine)}
-                  onSearch={handleSearchSubmit}
-                />
-              </div>
+              <SearchBar
+                currentEngine={currentEngine}
+                onEngineChange={(engine) => setCurrentEngine(engine)}
+                onSearch={handleSearchSubmit}
+                history={history}
+              />
 
               {/* 10 Requested Quick Shortcut Icons + Add Shortcut + Standalone Launcher */}
               <QuickShortcuts
@@ -1160,6 +1112,33 @@ export default function App() {
                   <span className="text-[10px] text-emerald-400 font-mono">
                     {performance.currentRamUsageMB.toFixed(0)} MB فقط
                   </span>
+                </div>
+              </div>
+
+              {/* Download Application Banner */}
+              <div
+                onClick={() => setIsApkModalOpen(true)}
+                className="w-full max-w-2xl mt-3 bg-gradient-to-r from-amber-500/15 via-emerald-500/15 to-teal-500/15 border border-emerald-500/30 hover:border-emerald-400/60 rounded-2xl p-3 cursor-pointer transition flex items-center justify-between gap-3 shadow-lg group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-slate-100 flex items-center gap-2">
+                      <span>{currentLanguage === 'ar' ? 'تنزيل وتثبيت التطبيق على هاتفك' : 'Install Lion Browser on Phone'}</span>
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">APK & PWA</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      {currentLanguage === 'ar'
+                        ? 'تثبيت فوري على شاشة الهاتف الرئيسية أو تنزيل ملف وحزمة APK'
+                        : 'Instant Home Screen Install or Download Android APK'}
+                    </p>
+                  </div>
+                </div>
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shrink-0 flex items-center gap-1 shadow">
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{currentLanguage === 'ar' ? 'تنزيل' : 'Install'}</span>
                 </div>
               </div>
             </div>
@@ -1271,7 +1250,7 @@ export default function App() {
         )}
 
         {/* Android Bottom Gesture Indicator Bar */}
-        <div style={isNativeApp ? { display: 'none' } : undefined} className="w-full bg-slate-950 py-2 flex items-center justify-center">
+        <div className="w-full bg-slate-950 py-2 flex items-center justify-center">
           <div className="w-32 h-1 rounded-full bg-slate-700"></div>
         </div>
       </main>
