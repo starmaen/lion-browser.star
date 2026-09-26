@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Globe, Mic, QrCode, X, ChevronDown, Sparkles, ArrowUpLeft, Clock } from 'lucide-react';
 import { SearchEngineId, HistoryItem } from '../types';
 import { SEARCH_ENGINES } from '../data/initialData';
@@ -84,9 +85,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   return (
     <div id="search-section" className="w-full max-w-3xl mx-auto px-2">
       {/* خلفية معتمة تغطي الصفحة كاملة أثناء البحث الكامل */}
-      {fullScreen && (
+      {fullScreen && createPortal(
         <div
-          className="fixed inset-0 bg-slate-950/98 z-[70] flex flex-col"
+          className="fixed inset-0 bg-slate-950 z-[9999] flex flex-col"
           style={{
             paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)',
             paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)',
@@ -156,11 +157,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Main Search Input Box */}
-      <form onSubmit={handleSubmit} className={`relative ${fullScreen ? 'fixed inset-x-2 z-[71]' : ''}`} style={fullScreen ? { top: 'max(env(safe-area-inset-top, 0px), 12px)' } : undefined}>
+      {fullScreen
+        ? createPortal(
+            <form
+              onSubmit={handleSubmit}
+              className="fixed inset-x-2 z-[10000]"
+              style={{ top: 'max(env(safe-area-inset-top, 0px), 12px)' }}
+            >
         <div
           className={`relative flex items-center bg-slate-900/95 backdrop-blur-xl border rounded-2xl shadow-xl transition-all duration-300 ${
             isFocused
@@ -250,8 +258,84 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               <Search className="w-5 h-5" />
             </button>
           </div>
-        </div>
-      </form>
+            </div>
+            </form>,
+            document.body
+          )
+        : (
+          <form onSubmit={handleSubmit} className="relative">
+            <div
+              className={`relative flex items-center bg-slate-900/95 backdrop-blur-xl border rounded-2xl shadow-xl transition-all duration-300 ${
+                isFocused
+                  ? 'border-amber-400/80 ring-2 ring-amber-500/30 shadow-amber-500/10'
+                  : 'border-slate-800 hover:border-slate-700'
+              }`}
+            >
+              <div className="relative pr-2 pl-1">
+                <button
+                  id="search-engine-dropdown-trigger"
+                  type="button"
+                  onClick={() => setIsEngineMenuOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-bold transition"
+                  title="تغيير محرك البحث"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: currentEngineObj.iconColor }} />
+                  <span className="hidden sm:inline">{currentEngineObj.nameAr}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+              </div>
+              <div className="relative flex-1 flex items-center">
+                <input
+                  ref={inputRef}
+                  id="main-browser-search-input"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onFocus={() => setIsFocused(true)}
+                  placeholder={currentEngineObj.placeholder}
+                  className="w-full bg-transparent py-4 px-3 text-base text-slate-100 placeholder:text-slate-500 focus:outline-none font-medium"
+                  dir="auto"
+                />
+                {query && (
+                  <button
+                    id="clear-search-query-btn"
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      inputRef.current?.focus();
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-slate-200 rounded-full hover:bg-slate-800 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-1 pl-2 pr-1">
+                <button
+                  id="voice-search-btn"
+                  type="button"
+                  onClick={handleVoiceSimulate}
+                  className={`p-2.5 rounded-xl transition cursor-pointer ${
+                    isVoiceListening
+                      ? 'bg-red-500/20 text-red-400 animate-pulse'
+                      : 'text-slate-400 hover:text-amber-400 hover:bg-slate-800'
+                  }`}
+                  title="البحث الصوتي"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+                <button
+                  id="submit-search-btn"
+                  type="submit"
+                  className="flex items-center justify-center p-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 rounded-xl shadow-lg shadow-amber-500/20 transition"
+                  title="بحث"
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
 
       {isVoiceListening && !fullScreen && (
         <div className="mt-2 text-center text-xs text-amber-400 font-medium animate-pulse flex items-center justify-center gap-1.5 bg-slate-900/80 py-1.5 rounded-full">

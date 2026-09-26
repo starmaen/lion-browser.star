@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LionWebViewPlugin.class);
+        registerPlugin(LionVpnPlugin.class);
         super.onCreate(savedInstanceState);
         applyLionWindowColors();
     }

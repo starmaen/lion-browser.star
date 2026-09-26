@@ -89,6 +89,8 @@ import { isNativeApp, closeNativeTab, LionWebView } from './native/lionWebView';
 import { useNativeBridge } from './native/useNativeBridge';
 // LION_UI_PATCH
 import { NativeTranslateBar } from './components/NativeTranslateBar';
+import { WireGuardModal } from './components/WireGuardModal';
+import { useWireGuardSync } from './native/useWireGuardSync';
 
 export default function App() {
   // State: System Languages & Localization (Arabic & English primary, with ability to add)
@@ -787,6 +789,7 @@ export default function App() {
       setTimeout(() => setToastMessage(null), 4000);
     },
   });
+  useWireGuardSync(setVpnState);
   const isOverlayOpen =
     isVpnModalOpen || isShieldModalOpen || isPasswordModalOpen || isGoogleModalOpen ||
     isPerformanceModalOpen || isTabsModalOpen || isOpenTabsBoxOpen || isSettingsOpen || isTranslationBarOpen ||
@@ -902,10 +905,10 @@ export default function App() {
                 ? 'bg-purple-950/60 border-purple-500/60 text-purple-300 shadow-sm shadow-purple-500/20'
                 : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-purple-300'
             }`}
-            title="Proton VPN Free"
+            title="WireGuard VPN"
           >
             <Shield className={`w-3.5 h-3.5 ${vpnState.isConnected ? 'text-purple-400' : ''}`} />
-            <span className="hidden sm:inline">Proton VPN</span>
+            <span className="hidden sm:inline">WireGuard</span>
             <span className={`w-2 h-2 rounded-full ${vpnState.isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
           </button>
 
@@ -1143,9 +1146,9 @@ export default function App() {
                   className="bg-slate-900/80 hover:bg-slate-800/80 border border-purple-500/20 rounded-2xl p-2.5 cursor-pointer transition"
                 >
                   <Shield className="w-4 h-4 text-purple-400 mx-auto mb-1" />
-                  <span className="text-[11px] font-bold text-slate-200 block">Proton VPN</span>
+                  <span className="text-[11px] font-bold text-slate-200 block">WireGuard VPN</span>
                   <span className="text-[10px] text-purple-300 font-mono">
-                    {vpnState.isConnected ? 'متصل' : 'سيرفرات مجانية'}
+                    {vpnState.isConnected ? 'متصل' : 'غير متصل'}
                   </span>
                 </div>
 
@@ -1183,7 +1186,7 @@ export default function App() {
                 className={`p-2 rounded-xl transition cursor-pointer flex flex-col items-center gap-0.5 ${
                   vpnState.isConnected ? 'text-purple-400' : 'text-slate-400 hover:text-purple-300'
                 }`}
-                title="Proton VPN"
+                title="WireGuard VPN"
               >
                 <Shield className="w-4 h-4" />
                 <span className="text-[9px] font-bold">VPN</span>
@@ -1290,15 +1293,18 @@ export default function App() {
       )}
 
       {/* Modals */}
-      {isVpnModalOpen && (
-        <ProtonVpnModal
-          vpnState={vpnState}
-          onToggleConnect={handleToggleVpn}
-          onSelectServer={handleSelectVpnServer}
-          onToggleKillSwitch={handleToggleKillSwitch}
-          onClose={() => setIsVpnModalOpen(false)}
-        />
-      )}
+      {isVpnModalOpen &&
+        (isNativeApp ? (
+          <WireGuardModal onClose={() => setIsVpnModalOpen(false)} />
+        ) : (
+          <ProtonVpnModal
+            vpnState={vpnState}
+            onToggleConnect={handleToggleVpn}
+            onSelectServer={handleSelectVpnServer}
+            onToggleKillSwitch={handleToggleKillSwitch}
+            onClose={() => setIsVpnModalOpen(false)}
+          />
+        ))}
 
       {isShieldModalOpen && (
         <PrivacyShieldModal
