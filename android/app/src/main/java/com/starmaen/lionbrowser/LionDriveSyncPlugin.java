@@ -38,7 +38,6 @@ public class LionDriveSyncPlugin extends Plugin {
     public void load() {
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
-                .requestProfile()
                 .requestScopes(new Scope(DriveScopes.DRIVE_FILE))
                 .build();
         mGoogleSignInClient = GoogleSignIn.getClient(getActivity(), gso);
@@ -46,6 +45,21 @@ public class LionDriveSyncPlugin extends Plugin {
 
     @PluginMethod
     public void signIn(PluginCall call) {
+        // التحقق إن كان المستخدم مسجل دخوله مسبقاً ولديه الصلاحية
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(getContext());
+        Scope driveScope = new Scope(DriveScopes.DRIVE_FILE);
+
+        if (account != null && GoogleSignIn.hasPermissions(account, driveScope)) {
+            initDriveService(account);
+            JSObject res = new JSObject();
+            res.put("success", true);
+            res.put("email", account.getEmail());
+            res.put("displayName", account.getDisplayName());
+            call.resolve(res);
+            return;
+        }
+
+        // إذا لم يكن مسجلاً، اطلب تسجيل الدخول
         Intent signInIntent = mGoogleSignInClient.getSignInIntent();
         startActivityForResult(call, signInIntent, "handleSignInResult");
     }
@@ -56,6 +70,7 @@ public class LionDriveSyncPlugin extends Plugin {
         try {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
             GoogleSignInAccount account = task.getResult();
+
             initDriveService(account);
 
             JSObject res = new JSObject();
