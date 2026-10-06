@@ -14,9 +14,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.tasks.Task;
-import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.http.ByteArrayContent;
+import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
@@ -53,8 +53,8 @@ public class LionDriveSyncPlugin extends Plugin {
     @ActivityCallback
     private void handleSignInResult(PluginCall call, ActivityResult result) {
         if (call == null) return;
-        Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
         try {
+            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
             GoogleSignInAccount account = task.getResult();
             initDriveService(account);
 
@@ -76,7 +76,7 @@ public class LionDriveSyncPlugin extends Plugin {
         credential.setSelectedAccount(account.getAccount());
 
         mDriveService = new Drive.Builder(
-                AndroidHttp.newCompatibleTransport(),
+                new NetHttpTransport(),
                 GsonFactory.getDefaultInstance(),
                 credential
         )
