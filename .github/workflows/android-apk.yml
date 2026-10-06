@@ -33,9 +33,25 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Setup Fixed Keystore
+        run: |
+          mkdir -p ~/.android
+          # إنشاء المفتاح الثابت في المكانين لضمان التقاطه
+          keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          cp ~/.android/debug.keystore android/app/debug.keystore
+          echo "==================== [ SHA1 ] ===================="
+          keytool -list -v -keystore android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep "SHA1:"
+          echo "=================================================="
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug
+
+      - name: Verify APK Signature Directly
+        run: |
+          echo "==================== [ ACTUAL APK SHA1 ] ===================="
+          $ANDROID_HOME/build-tools/34.0.0/apksigner verify --print-certs android/app/build/outputs/apk/debug/app-debug.apk | grep -i "SHA-1 digest:"
+          echo "============================================================="
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

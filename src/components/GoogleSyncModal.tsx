@@ -28,10 +28,25 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState(false);
 
-  const handleSyncNow = () => {
+  const handleSyncNow = async () => {
     setIsSyncing(true);
     setSyncSuccessMsg(false);
-    setTimeout(() => {
+
+    try {
+      const capacitor = (window as any).Capacitor;
+      if (capacitor && capacitor.Plugins && capacitor.Plugins.LionDriveSync) {
+        const syncPayload = {
+          bookmarks: account.syncBookmarks ? JSON.parse(localStorage.getItem('lion_bookmarks') || '[]') : [],
+          history: account.syncHistory ? JSON.parse(localStorage.getItem('lion_history') || '[]') : [],
+          tabs: account.syncTabs ? JSON.parse(localStorage.getItem('lion_tabs') || '[]') : [],
+          syncedAt: new Date().toISOString()
+        };
+
+        await capacitor.Plugins.LionDriveSync.syncData({
+          data: JSON.stringify(syncPayload, null, 2)
+        });
+      }
+
       setIsSyncing(false);
       setSyncSuccessMsg(true);
       onUpdateAccount({
@@ -39,7 +54,10 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
         lastSyncedAt: 'الآن مباشرة',
       });
       setTimeout(() => setSyncSuccessMsg(false), 3000);
-    }, 1500);
+    } catch (error: any) {
+      setIsSyncing(false);
+      alert('خطأ أثناء المزامنة: ' + (error?.message || error));
+    }
   };
 
   const toggleOption = (key: keyof GoogleAccount) => {
@@ -49,7 +67,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
     });
   };
 
-  const handleToggleSignIn = () => {
+  const handleToggleSignIn = async () => {
     if (account.isSignedIn) {
       onUpdateAccount({
         ...account,
@@ -57,14 +75,44 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
         name: 'غير مسجل الدخول',
         email: '',
       });
-    } else {
-      onUpdateAccount({
-        ...account,
-        isSignedIn: true,
-        name: 'النجم السوري (starsyria)',
-        email: 'starsyria2500@gmail.com',
-        lastSyncedAt: 'الآن',
-      });
+      return;
+    }
+
+    try {
+      const capacitor = (window as any).Capacitor;
+      if (capacitor && capacitor.Plugins && capacitor.Plugins.LionDriveSync) {
+        const res = await capacitor.Plugins.LionDriveSync.signIn();
+        if (res && res.success) {
+          onUpdateAccount({
+            ...account,
+            isSignedIn: true,
+            name: res.displayName || 'مستخدم غوغل',
+            email: res.email || '',
+            lastSyncedAt: 'الآن',
+          });
+
+          const fetchRes = await capacitor.Plugins.LionDriveSync.fetchSyncedData();
+          if (fetchRes && fetchRes.found && fetchRes.data) {
+            const cloudData = JSON.parse(fetchRes.data);
+            if (cloudData.bookmarks) {
+              localStorage.setItem('lion_bookmarks', JSON.stringify(cloudData.bookmarks));
+            }
+            if (cloudData.history) {
+              localStorage.setItem('lion_history', JSON.stringify(cloudData.history));
+            }
+          }
+        }
+      } else {
+        onUpdateAccount({
+          ...account,
+          isSignedIn: true,
+          name: 'النجم السوري (starsyria)',
+          email: 'starsyria2500@gmail.com',
+          lastSyncedAt: 'الآن',
+        });
+      }
+    } catch (error: any) {
+      alert('فشل تسجيل الدخول: ' + (error?.message || error));
     }
   };
 
@@ -74,28 +122,14 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
         id="google-sync-modal"
         className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
       >
-        {/* Header */}
         <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            {/* Google Colorful G Icon */}
             <div className="w-10 h-10 rounded-2xl bg-white flex items-center justify-center shadow-md">
               <svg className="w-6 h-6" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
+                <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
               </svg>
             </div>
             <div>
@@ -110,30 +144,24 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition"
-          >
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Account Profile Card */}
         <div className="p-4 bg-slate-950/60 border-b border-slate-800">
           {account.isSignedIn ? (
             <div className="flex items-center justify-between bg-slate-900 p-3 rounded-2xl border border-slate-800">
               <div className="flex items-center gap-3">
                 <img
-                  src={account.avatarUrl}
+                  src={account.avatarUrl || 'https://www.gstatic.com/images/branding/product/1x/avatar_square_blue_512dp.png'}
                   alt={account.name}
                   className="w-11 h-11 rounded-full border-2 border-blue-500/50 object-cover"
                   referrerPolicy="no-referrer"
                 />
                 <div>
                   <span className="text-xs font-bold text-slate-100 block">{account.name}</span>
-                  <span className="text-[11px] text-slate-400 font-mono block">
-                    {account.email}
-                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono block">{account.email}</span>
                   <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">
                     آخر مزامنة: {account.lastSyncedAt}
                   </span>
@@ -162,22 +190,10 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
                 className="flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-xs mx-auto shadow-lg transition"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                  />
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.04 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                 </svg>
                 <span>تسجيل الدخول باستخدام Google</span>
               </button>
@@ -185,11 +201,9 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
           )}
         </div>
 
-        {/* Sync Settings Toggles */}
         <div className="p-4 space-y-2.5 flex-1 overflow-y-auto">
           <div className="text-xs font-bold text-slate-400 mb-1">عناصر المزامنة السحابية:</div>
 
-          {/* Bookmarks */}
           <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Bookmark className="w-4 h-4 text-amber-400" />
@@ -201,19 +215,12 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
             <button
               type="button"
               onClick={() => toggleOption('syncBookmarks')}
-              className={`w-10 h-5 rounded-full transition-colors relative ${
-                account.syncBookmarks ? 'bg-blue-600' : 'bg-slate-700'
-              }`}
+              className={`w-10 h-5 rounded-full transition-colors relative ${account.syncBookmarks ? 'bg-blue-600' : 'bg-slate-700'}`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${
-                  account.syncBookmarks ? 'left-5' : 'left-0.5'
-                }`}
-              />
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${account.syncBookmarks ? 'left-5' : 'left-0.5'}`} />
             </button>
           </div>
 
-          {/* Passwords */}
           <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Key className="w-4 h-4 text-emerald-400" />
@@ -225,19 +232,12 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
             <button
               type="button"
               onClick={() => toggleOption('syncPasswords')}
-              className={`w-10 h-5 rounded-full transition-colors relative ${
-                account.syncPasswords ? 'bg-blue-600' : 'bg-slate-700'
-              }`}
+              className={`w-10 h-5 rounded-full transition-colors relative ${account.syncPasswords ? 'bg-blue-600' : 'bg-slate-700'}`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${
-                  account.syncPasswords ? 'left-5' : 'left-0.5'
-                }`}
-              />
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${account.syncPasswords ? 'left-5' : 'left-0.5'}`} />
             </button>
           </div>
 
-          {/* History */}
           <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <History className="w-4 h-4 text-purple-400" />
@@ -249,19 +249,12 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
             <button
               type="button"
               onClick={() => toggleOption('syncHistory')}
-              className={`w-10 h-5 rounded-full transition-colors relative ${
-                account.syncHistory ? 'bg-blue-600' : 'bg-slate-700'
-              }`}
+              className={`w-10 h-5 rounded-full transition-colors relative ${account.syncHistory ? 'bg-blue-600' : 'bg-slate-700'}`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${
-                  account.syncHistory ? 'left-5' : 'left-0.5'
-                }`}
-              />
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${account.syncHistory ? 'left-5' : 'left-0.5'}`} />
             </button>
           </div>
 
-          {/* Open Tabs */}
           <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Layers className="w-4 h-4 text-cyan-400" />
@@ -273,20 +266,13 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
             <button
               type="button"
               onClick={() => toggleOption('syncTabs')}
-              className={`w-10 h-5 rounded-full transition-colors relative ${
-                account.syncTabs ? 'bg-blue-600' : 'bg-slate-700'
-              }`}
+              className={`w-10 h-5 rounded-full transition-colors relative ${account.syncTabs ? 'bg-blue-600' : 'bg-slate-700'}`}
             >
-              <div
-                className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${
-                  account.syncTabs ? 'left-5' : 'left-0.5'
-                }`}
-              />
+              <div className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-0.5 ${account.syncTabs ? 'left-5' : 'left-0.5'}`} />
             </button>
           </div>
         </div>
 
-        {/* Sync Action & Feedback */}
         <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
           <div>
             {syncSuccessMsg && (
@@ -303,7 +289,7 @@ export const GoogleSyncModal: React.FC<GoogleSyncModalProps> = ({
               type="button"
               disabled={isSyncing || !account.isSignedIn}
               onClick={handleSyncNow}
-              className={`flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'جاري المزامنة...' : 'مزامنة الآن'}</span>
