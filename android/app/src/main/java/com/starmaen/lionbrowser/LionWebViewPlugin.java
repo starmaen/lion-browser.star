@@ -2,16 +2,21 @@ package com.starmaen.lionbrowser;
 
 import android.annotation.SuppressLint;
 import android.app.DownloadManager;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
@@ -43,11 +48,21 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 import org.json.JSONTokener;
 
+import java.io.FileOutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -79,6 +94,13 @@ public class LionWebViewPlugin extends Plugin {
 
     private DownloadManager dm;
     private final Handler handler = new Handler(Looper.getMainLooper());
+
+    // تنزيل متوازٍ مُسرَّع (عدة اتصالات لكل ملف) لما يدعمه الخادم
+    private final ExecutorService downloadExecutor = Executors.newCachedThreadPool();
+    private static final int ACCEL_SEGMENTS = 4;
+    private static final long ACCEL_MIN_BYTES = 5L * 1024 * 1024; // 5MB فأكثر يستحق التوازي
+    private final Map<String, Uri> accelUris = new HashMap<>();
+    private final Map<String, AtomicBoolean> accelCancelled = new HashMap<>();
     private final Set<Long> activeDownloads = new HashSet<>();
     private boolean polling = false;
 
@@ -129,6 +151,7 @@ public class LionWebViewPlugin extends Plugin {
 
     protected void handleOnDestroy() {
         handler.removeCallbacksAndMessages(null);
+        downloadExecutor.shutdownNow();
         for (WebView w : views.values()) {
             try {
                 w.destroy();
@@ -494,7 +517,203 @@ public class LionWebViewPlugin extends Plugin {
 
     // ----------------------------------------------------------- downloads
 
-    private void startDownload(String pageUrl, String url, String ua, String cd, String mime, long len) {
+    private void startDownload(final String pageUrl, final String url, final String ua, final String cd, final String mime, final long len) {
+        if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
+            JSObject err = new JSObject();
+            err.put("message", "\u0647\u0630\u0627 \u0627\u0644\u0646\u0648\u0639 \u0645\u0646 \u0627\u0644\u0631\u0648\u0627\u0628\u0637 \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645 \u0644\u0644\u062A\u0646\u0632\u064A\u0644");
+            notifyListeners("downloadError", err);
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            downloadExecutor.execute(() -> probeAndMaybeAccelerate(pageUrl, url, ua, cd, mime, len));
+        } else {
+            startDownloadManager(pageUrl, url, ua, cd, mime, len);
+        }
+    }
+
+    /** يفحص دعم الخادم لطلبات Range، ويختار بين التنزيل المتوازي أو التنزيل العادي */
+    private void probeAndMaybeAccelerate(String pageUrl, String url, String ua, String cd, String mime, long len) {
+        long total = -1;
+        boolean rangeOk = false;
+        HttpURLConnection probe = null;
+        try {
+            probe = (HttpURLConnection) new URL(url).openConnection();
+            probe.setConnectTimeout(4000);
+            probe.setReadTimeout(4000);
+            probe.setRequestProperty("Range", "bytes=0-0");
+            if (ua != null) probe.setRequestProperty("User-Agent", ua);
+            if (pageUrl != null) probe.setRequestProperty("Referer", pageUrl);
+            String cookie = CookieManager.getInstance().getCookie(url);
+            if (cookie != null) probe.setRequestProperty("Cookie", cookie);
+            int code = probe.getResponseCode();
+            if (code == 206) {
+                String range = probe.getHeaderField("Content-Range");
+                if (range != null) {
+                    Matcher m = Pattern.compile("/(\\d+)$").matcher(range);
+                    if (m.find()) total = Long.parseLong(m.group(1));
+                }
+                rangeOk = true;
+            } else if (code == 200) {
+                rangeOk = "bytes".equalsIgnoreCase(probe.getHeaderField("Accept-Ranges"));
+                total = probe.getContentLengthLong();
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (probe != null) probe.disconnect();
+        }
+        if (!rangeOk || total < ACCEL_MIN_BYTES) {
+            ui(() -> startDownloadManager(pageUrl, url, ua, cd, mime, len));
+            return;
+        }
+        startAcceleratedDownload(pageUrl, url, ua, mime, total);
+    }
+
+    /** تنزيل متوازٍ حقيقي: يقسّم الملف إلى أجزاء ويحمّلها معاً عبر عدة اتصالات، ثم يحفظه في Download/LionBrowser */
+    private void startAcceleratedDownload(String pageUrl, String url, String ua, String mime, long total) {
+        final String id = "acc" + System.currentTimeMillis();
+        final String name = URLUtil.guessFileName(url, null, mime);
+        final String resolvedMime = (mime == null || mime.isEmpty()) ? "application/octet-stream" : mime;
+        ContentResolver resolver = getContext().getContentResolver();
+        Uri collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+        values.put(MediaStore.Downloads.MIME_TYPE, resolvedMime);
+        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/LionBrowser");
+        values.put(MediaStore.Downloads.IS_PENDING, 1);
+        final Uri uri;
+        try {
+            uri = resolver.insert(collection, values);
+        } catch (Exception e) {
+            ui(() -> startDownloadManager(pageUrl, url, ua, null, mime, -1));
+            return;
+        }
+        if (uri == null) {
+            ui(() -> startDownloadManager(pageUrl, url, ua, null, mime, -1));
+            return;
+        }
+
+        JSObject started = new JSObject();
+        started.put("id", id);
+        started.put("fileName", name);
+        started.put("mimeType", resolvedMime);
+        started.put("url", url);
+        started.put("sizeBytes", total);
+        notifyListeners("downloadStarted", started);
+
+        final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final AtomicBoolean failed = new AtomicBoolean(false);
+        final AtomicLong done = new AtomicLong(0);
+        final AtomicInteger remaining = new AtomicInteger(ACCEL_SEGMENTS);
+        accelUris.put(id, uri);
+        accelCancelled.put(id, cancelled);
+
+        ParcelFileDescriptor pfd;
+        FileChannel channel;
+        try {
+            pfd = resolver.openFileDescriptor(uri, "rw");
+            channel = new FileOutputStream(pfd.getFileDescriptor()).getChannel();
+        } catch (Exception e) {
+            accelUris.remove(id);
+            accelCancelled.remove(id);
+            try {
+                resolver.delete(uri, null, null);
+            } catch (Exception ignored) {
+            }
+            JSObject err = new JSObject();
+            err.put("message", "\u062A\u0639\u0630\u0651\u0631 \u062A\u062C\u0647\u064A\u0632 \u0645\u0644\u0641 \u0627\u0644\u062A\u0646\u0632\u064A\u0644");
+            notifyListeners("downloadError", err);
+            return;
+        }
+
+        Runnable onAllDone = () -> {
+            try {
+                channel.close();
+                pfd.close();
+            } catch (Exception ignored) {
+            }
+            accelUris.remove(id);
+            accelCancelled.remove(id);
+            JSObject o = new JSObject();
+            o.put("id", id);
+            if (cancelled.get() || failed.get()) {
+                try {
+                    resolver.delete(uri, null, null);
+                } catch (Exception ignored) {
+                }
+                o.put("status", cancelled.get() ? "failed" : "failed");
+                notifyListeners("downloadProgress", o);
+            } else {
+                try {
+                    ContentValues done2 = new ContentValues();
+                    done2.put(MediaStore.Downloads.IS_PENDING, 0);
+                    resolver.update(uri, done2, null, null);
+                } catch (Exception ignored) {
+                }
+                o.put("status", "completed");
+                o.put("progress", 100);
+                o.put("sizeBytes", total);
+                notifyListeners("downloadProgress", o);
+            }
+        };
+
+        // متابعة التقدّم الإجمالي لكل الأجزاء معاً
+        final long totalF = total;
+        Runnable progressTask = new Runnable() {
+            @Override
+            public void run() {
+                if (remaining.get() <= 0) return;
+                JSObject o = new JSObject();
+                o.put("id", id);
+                o.put("status", "downloading");
+                long got = done.get();
+                int pct = totalF > 0 ? (int) Math.min(99, (got * 100) / totalF) : 0;
+                o.put("progress", pct);
+                o.put("sizeBytes", totalF);
+                notifyListeners("downloadProgress", o);
+                if (remaining.get() > 0) handler.postDelayed(this, 500);
+            }
+        };
+        handler.postDelayed(progressTask, 500);
+
+        long segSize = total / ACCEL_SEGMENTS;
+        for (int i = 0; i < ACCEL_SEGMENTS; i++) {
+            final long start = i * segSize;
+            final long end = (i == ACCEL_SEGMENTS - 1) ? total - 1 : (start + segSize - 1);
+            final FileChannel ch = channel;
+            downloadExecutor.execute(() -> {
+                HttpURLConnection conn = null;
+                try {
+                    conn = (HttpURLConnection) new URL(url).openConnection();
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(15000);
+                    conn.setRequestProperty("Range", "bytes=" + start + "-" + end);
+                    if (ua != null) conn.setRequestProperty("User-Agent", ua);
+                    if (pageUrl != null) conn.setRequestProperty("Referer", pageUrl);
+                    String cookie = CookieManager.getInstance().getCookie(url);
+                    if (cookie != null) conn.setRequestProperty("Cookie", cookie);
+                    int code = conn.getResponseCode();
+                    if (code != 206 && code != 200) throw new java.io.IOException("HTTP " + code);
+                    byte[] buf = new byte[65536];
+                    long pos = start;
+                    java.io.InputStream in = conn.getInputStream();
+                    int n;
+                    while ((n = in.read(buf)) != -1) {
+                        if (cancelled.get() || failed.get()) break;
+                        ch.write(ByteBuffer.wrap(buf, 0, n), pos);
+                        pos += n;
+                        done.addAndGet(n);
+                    }
+                } catch (Exception e) {
+                    failed.set(true);
+                } finally {
+                    if (conn != null) conn.disconnect();
+                    if (remaining.decrementAndGet() == 0) handler.post(onAllDone);
+                }
+            });
+        }
+    }
+
+    private void startDownloadManager(String pageUrl, String url, String ua, String cd, String mime, long len) {
         try {
             if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) {
                 JSObject err = new JSObject();
@@ -833,6 +1052,19 @@ public class LionWebViewPlugin extends Plugin {
     public void openDownload(final PluginCall call) {
         final String idStr = call.getString("id");
         ui(() -> {
+            Uri accel = idStr != null ? accelUris.get(idStr) : null;
+            if (accel != null) {
+                try {
+                    Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setDataAndType(accel, getContext().getContentResolver().getType(accel));
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getActivity().startActivity(i);
+                    call.resolve();
+                } catch (Exception e) {
+                    call.reject("cannot open: " + e.getMessage());
+                }
+                return;
+            }
             try {
                 long id = Long.parseLong(idStr);
                 Uri uri = dm.getUriForDownloadedFile(id);
@@ -856,6 +1088,12 @@ public class LionWebViewPlugin extends Plugin {
     public void cancelDownload(final PluginCall call) {
         final String idStr = call.getString("id");
         ui(() -> {
+            AtomicBoolean accelFlag = idStr != null ? accelCancelled.get(idStr) : null;
+            if (accelFlag != null) {
+                accelFlag.set(true);
+                call.resolve();
+                return;
+            }
             try {
                 long id = Long.parseLong(idStr);
                 dm.remove(id);

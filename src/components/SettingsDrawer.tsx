@@ -25,7 +25,9 @@ import {
   Settings,
   SlidersHorizontal,
   RefreshCw,
-  Smartphone
+  Smartphone,
+  Mail,
+  MessageCircle,
 } from 'lucide-react';
 import {
   GoogleAccount,
@@ -710,6 +712,50 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             </>
           )}
 
+          {/* SUPPORT / CONTACT CARD */}
+          <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2.5">
+            <h4 className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+              <MessageCircle className="w-4 h-4 text-amber-400" />
+              {isRtl ? 'الدعم الفني' : 'Support'}
+            </h4>
+            <a
+              id="settings-support-email"
+              href="mailto:starsyria2500@gmail.com"
+              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                <Mail className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 text-right">
+                <span className="text-[11px] font-bold text-slate-200 block">
+                  {isRtl ? 'البريد الإلكتروني' : 'Email'}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono block truncate" dir="ltr">
+                  starsyria2500@gmail.com
+                </span>
+              </div>
+            </a>
+            <a
+              id="settings-support-whatsapp"
+              href="https://wa.me/963938466549"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 transition cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                <MessageCircle className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 text-right">
+                <span className="text-[11px] font-bold text-slate-200 block">
+                  {isRtl ? 'واتساب' : 'WhatsApp'}
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono block" dir="ltr">
+                  +963 938 466 549
+                </span>
+              </div>
+            </a>
+          </div>
+
           {/* ABOUT LION BROWSER BRAND CARD */}
           <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-center">
             <div className="flex justify-center mb-2">
@@ -719,6 +765,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <p className="text-[11px] text-slate-500 mt-0.5">
               Engine: LionWebKit Quantum 2026.9 • Chromium Core 132 • Built for Privacy & Speed
             </p>
+            <p className="text-[10px] text-slate-600 mt-1">Star Syria</p>
           </div>
         </div>
 
